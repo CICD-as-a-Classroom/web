@@ -346,6 +346,7 @@ export async function dispatchWorkflowViaIssue(organizationName, workflowDispatc
             runStatus = pollResponse.data['status'];
             runConclusion = pollResponse.data['conclusion'];
         } catch (error) {
+            console.log(error);
             if (statusUpdateCallback) {
                 statusUpdateCallback({
                     status: 'error',
@@ -385,6 +386,7 @@ export async function dispatchWorkflowViaIssue(organizationName, workflowDispatc
         });
         artifactMetadataResponseData = artifactMetadataResponse.data;
     } catch (error) {
+        console.log(error);
         if (statusUpdateCallback) {
             statusUpdateCallback({
                 status: 'error',
@@ -416,6 +418,7 @@ export async function dispatchWorkflowViaIssue(organizationName, workflowDispatc
             archive_format: 'zip',
         });
     } catch (error) {
+        console.log(error);
         if (statusUpdateCallback) {
             statusUpdateCallback({
                 status: 'error',
