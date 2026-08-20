@@ -233,7 +233,7 @@ async function acceptAssignment(organizationName, workflowDispatchAppInstallatio
         if (assignmentAcceptKey !== null) {
             workflowInputs['assignmentAcceptKey'] = assignmentAcceptKey;
         }
-        zip = await util.dispatchWorkflowViaIssue(organizationName, workflowDispatchAppInstallation, 'accept-assignment', workflowInputs, updateWorkflowStatus, siteConfig.pollDelay);
+        zip = await util.dispatchWorkflowViaIssue(organizationName, workflowDispatchAppInstallation, 'accept-assignment', workflowInputs, updateWorkflowStatus, siteConfig.pollDelay, accessToken);
 
         if (zip === null) {
             // Workflow failed. Error message should already be displayed via
