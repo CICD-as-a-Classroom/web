@@ -161,7 +161,7 @@ async function getClassroomRSAPublicKey() {
 
 const classroomRSAPublicKey = await getClassroomRSAPublicKey();
 
-export async function dispatchWorkflowViaIssue(organizationName, workflowDispatchAppInstallation, workflowEventName, workflowInputs, statusUpdateCallback, pollDelay) {
+export async function dispatchWorkflowViaIssue(organizationName, workflowDispatchAppInstallation, workflowEventName, workflowInputs, statusUpdateCallback, pollDelay, userAccessToken) {
     if (!pollDelay) {
         pollDelay = 2000;
     }
@@ -220,29 +220,62 @@ export async function dispatchWorkflowViaIssue(organizationName, workflowDispatc
     const issueBodyBase64 = new TextEncoder().encode(issueBody).toBase64();
 
     // Post issue
-    let postIssueResponse;
-    try {
-        postIssueResponse = await workflowDispatchAppInstallation.request(`POST /repos/${organizationName}/backend-workflows/issues`, {
-            owner: organizationName,
-            repo: 'backend-workflows',
-            title: `[securely-dispatch-workflow]`,
-            body: issueBodyBase64,
-            headers: {
-                'X-GitHub-Api-Version': '2026-03-10'
+    let postIssueResponseData;
+    if (userAccessToken) {
+        const body = {
+            'title': '[securely-dispatch-workflow]',
+            'body': issueBodyBase64
+        };
+        const postIssueResponse = await fetch(
+            `https://api.github.com/repos/${organizationName}/backend-workflows/issues`,
+            {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/vnd.github+json',
+                    'X-GitHub-Api-Version': '2026-03-10',
+                    'Authorization': `Bearer ${userAccessToken}`
+                },
+                body: JSON.stringify(body)
             }
-        });
-    } catch (error) {
-        console.log(error);
-        if (statusUpdateCallback) {
-            statusUpdateCallback({
-                status: 'error',
-                message: 'Failed to post workflow-dispatch issue'
-            });
+        );
+
+        if (!postIssueResponse.ok) {
+            console.log(`Got HTTP status ${postIssueResponse.status} when creating issue`);
+            if (statusUpdateCallback) {
+                statusUpdateCallback({
+                    status: 'error',
+                    message: 'Failed to post workflow-dispatch issue'
+                });
+            }
+            return;
         }
-        return;
+
+        postIssueResponseData = await postIssueResponse.json();
+    } else {
+        try {
+            const postIssueResponse = await workflowDispatchAppInstallation.request(`POST /repos/${organizationName}/backend-workflows/issues`, {
+                owner: organizationName,
+                repo: 'backend-workflows',
+                title: `[securely-dispatch-workflow]`,
+                body: issueBodyBase64,
+                headers: {
+                    'X-GitHub-Api-Version': '2026-03-10'
+                }
+            });
+            postIssueResponseData = postIssueResponse.data
+        } catch (error) {
+            console.log(error);
+            if (statusUpdateCallback) {
+                statusUpdateCallback({
+                    status: 'error',
+                    message: 'Failed to post workflow-dispatch issue'
+                });
+            }
+            return;
+        }
     }
 
-    const issueNumber = postIssueResponse.data['number']
+    const issueNumber = postIssueResponseData['number'];
 
     if (statusUpdateCallback) {
         statusUpdateCallback({
