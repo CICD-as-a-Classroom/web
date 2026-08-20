@@ -161,7 +161,9 @@ async function getClassroomRSAPublicKey() {
 
 const classroomRSAPublicKey = await getClassroomRSAPublicKey();
 
-export async function dispatchWorkflowViaIssue(organizationName, workflowDispatchAppInstallation, workflowEventName, workflowInputs, statusUpdateCallback, pollDelay, userAccessToken) {
+export async function dispatchWorkflowViaIssue(organizationName, workflowDispatchAppInstallation, workflowEventName, workflowInputs, statusUpdateCallback, pollDelay, userAccessTokenOctokit) {
+    let userOctokit = userAccessTokenOctokit ? userAccessTokenOctokit : workflowDispatchAppInstallation;
+
     if (!pollDelay) {
         pollDelay = 2000;
     }
@@ -221,58 +223,26 @@ export async function dispatchWorkflowViaIssue(organizationName, workflowDispatc
 
     // Post issue
     let postIssueResponseData;
-    if (userAccessToken) {
-        const body = {
-            'title': '[securely-dispatch-workflow]',
-            'body': issueBodyBase64
-        };
-        const postIssueResponse = await fetch(
-            `https://api.github.com/repos/${organizationName}/backend-workflows/issues`,
-            {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/vnd.github+json',
-                    'X-GitHub-Api-Version': '2026-03-10',
-                    'Authorization': `Bearer ${userAccessToken}`
-                },
-                body: JSON.stringify(body)
+    try {
+        const postIssueResponse = await userOctokit.request(`POST /repos/${organizationName}/backend-workflows/issues`, {
+            owner: organizationName,
+            repo: 'backend-workflows',
+            title: `[securely-dispatch-workflow]`,
+            body: issueBodyBase64,
+            headers: {
+                'X-GitHub-Api-Version': '2026-03-10'
             }
-        );
-
-        if (!postIssueResponse.ok) {
-            console.log(`Got HTTP status ${postIssueResponse.status} when creating issue`);
-            if (statusUpdateCallback) {
-                statusUpdateCallback({
-                    status: 'error',
-                    message: 'Failed to post workflow-dispatch issue'
-                });
-            }
-            return;
-        }
-
-        postIssueResponseData = await postIssueResponse.json();
-    } else {
-        try {
-            const postIssueResponse = await workflowDispatchAppInstallation.request(`POST /repos/${organizationName}/backend-workflows/issues`, {
-                owner: organizationName,
-                repo: 'backend-workflows',
-                title: `[securely-dispatch-workflow]`,
-                body: issueBodyBase64,
-                headers: {
-                    'X-GitHub-Api-Version': '2026-03-10'
-                }
+        });
+        postIssueResponseData = postIssueResponse.data
+    } catch (error) {
+        console.log(error);
+        if (statusUpdateCallback) {
+            statusUpdateCallback({
+                status: 'error',
+                message: 'Failed to post workflow-dispatch issue'
             });
-            postIssueResponseData = postIssueResponse.data
-        } catch (error) {
-            console.log(error);
-            if (statusUpdateCallback) {
-                statusUpdateCallback({
-                    status: 'error',
-                    message: 'Failed to post workflow-dispatch issue'
-                });
-            }
-            return;
         }
+        return;
     }
 
     const issueNumber = postIssueResponseData['number'];
@@ -284,13 +254,13 @@ export async function dispatchWorkflowViaIssue(organizationName, workflowDispatc
     }
 
     // Poll issue for response comment with workflow run ID
-    let issuePollResponse;
+    let issuePollResponseData;
     let runId = null;
     do {
         await sleep(pollDelay);
 
         try {
-            issuePollResponse = await workflowDispatchAppInstallation.request(`GET /repos/${organizationName}/backend-workflows/issues/${issueNumber}/comments`, {
+            const issuePollResponse = await userOctokit.request(`GET /repos/${organizationName}/backend-workflows/issues/${issueNumber}/comments`, {
                 owner: organizationName,
                 repo: 'backend-workflows',
                 issue_number: issueNumber,
@@ -299,18 +269,19 @@ export async function dispatchWorkflowViaIssue(organizationName, workflowDispatc
                     'If-None-Match': ''
                 }
             });
+            issuePollResponseData = issuePollResponse.data
         } catch (error) {
             console.log(error);
             if (statusUpdateCallback) {
                 statusUpdateCallback({
                     status: 'error',
-                    message: 'Failed to poll workflow run status'
+                    message: 'Failed to poll issue response'
                 });
             }
             return;
         }
         
-        for (const comment of issuePollResponse.data) {
+        for (const comment of issuePollResponseData) {
             if (comment['user']['type'] != 'Bot') {
                 // Response should be from backend workflow, authenticated via
                 // app installation access token, so the account type should
@@ -358,12 +329,11 @@ export async function dispatchWorkflowViaIssue(organizationName, workflowDispatc
     // Poll workflow run until done
     let runStatus = null;
     let runConclusion = null;
-    let pollResponse;
     do {
         await sleep(pollDelay);
         
         try {
-            pollResponse = await workflowDispatchAppInstallation.request(`GET /repos/${siteConfig.backendRepoOwner}/${siteConfig.backendRepo}/actions/runs/${runId}`, {
+            const pollResponse = await userOctokit.request(`GET /repos/${siteConfig.backendRepoOwner}/${siteConfig.backendRepo}/actions/runs/${runId}`, {
                 owner: siteConfig.backendRepoOwner,
                 repo: siteConfig.backendRepo,
                 run_id: runId,
@@ -372,6 +342,9 @@ export async function dispatchWorkflowViaIssue(organizationName, workflowDispatc
                     'If-None-Match': ''
                 }
             })
+
+            runStatus = pollResponse.data['status'];
+            runConclusion = pollResponse.data['conclusion'];
         } catch (error) {
             if (statusUpdateCallback) {
                 statusUpdateCallback({
@@ -381,9 +354,6 @@ export async function dispatchWorkflowViaIssue(organizationName, workflowDispatc
             }
             return;
         }
-        
-        runStatus = pollResponse.data['status'];
-        runConclusion = pollResponse.data['conclusion'];
     } while (runConclusion === null);
 
     if (runConclusion !== 'success') {
@@ -403,9 +373,8 @@ export async function dispatchWorkflowViaIssue(organizationName, workflowDispatc
     }
 
     // Retrieve metadata of all workflow run artifacts
-    let artifactMetadataResponse;
     try {
-        artifactMetadataResponse = await workflowDispatchAppInstallation.request(`GET /repos/${siteConfig.backendRepoOwner}/${siteConfig.backendRepo}/actions/runs/${runId}/artifacts`, {
+        const artifactMetadataResponse = await userOctokit.request(`GET /repos/${siteConfig.backendRepoOwner}/${siteConfig.backendRepo}/actions/runs/${runId}/artifacts`, {
             owner: siteConfig.backendRepoOwner,
             repo: siteConfig.backendRepo,
             run_id: runId,
@@ -414,6 +383,7 @@ export async function dispatchWorkflowViaIssue(organizationName, workflowDispatc
                 'If-None-Match': ''
             }
         });
+        artifactMetadataResponseData = artifactMetadataResponse.data;
     } catch (error) {
         if (statusUpdateCallback) {
             statusUpdateCallback({
@@ -425,7 +395,7 @@ export async function dispatchWorkflowViaIssue(organizationName, workflowDispatc
     }
 
     // Extract result artifact metadata
-    const resultArtifactsMetadata = artifactMetadataResponse.data['artifacts'].filter(x => x.name == 'result');
+    const resultArtifactsMetadata = artifactMetadataResponseData['artifacts'].filter(x => x.name == 'result');
     if (resultArtifactsMetadata.length == 0) {
         if (statusUpdateCallback) {
             statusUpdateCallback({
@@ -439,7 +409,7 @@ export async function dispatchWorkflowViaIssue(organizationName, workflowDispatc
     // Download the result artifact archive
     let resultArtifactResponse;
     try {
-        resultArtifactResponse = await workflowDispatchAppInstallation.rest.actions.downloadArtifact({
+        resultArtifactResponse = await userOctokit.rest.actions.downloadArtifact({
             owner: siteConfig.backendRepoOwner,
             repo: siteConfig.backendRepo,
             artifact_id: resultArtifactsMetadata[0].id,
