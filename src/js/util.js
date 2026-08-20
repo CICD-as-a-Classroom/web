@@ -374,6 +374,7 @@ export async function dispatchWorkflowViaIssue(organizationName, workflowDispatc
     }
 
     // Retrieve metadata of all workflow run artifacts
+    let artifactMetadataResponseData;
     try {
         const artifactMetadataResponse = await userOctokit.request(`GET /repos/${siteConfig.backendRepoOwner}/${siteConfig.backendRepo}/actions/runs/${runId}/artifacts`, {
             owner: siteConfig.backendRepoOwner,
@@ -409,14 +410,15 @@ export async function dispatchWorkflowViaIssue(organizationName, workflowDispatc
     }
     
     // Download the result artifact archive
-    let resultArtifactResponse;
+    let resultArtifactResponseData;
     try {
-        resultArtifactResponse = await userOctokit.rest.actions.downloadArtifact({
+        const resultArtifactResponse = await userOctokit.rest.actions.downloadArtifact({
             owner: siteConfig.backendRepoOwner,
             repo: siteConfig.backendRepo,
             artifact_id: resultArtifactsMetadata[0].id,
             archive_format: 'zip',
         });
+        resultArtifactResponseData = resultArtifactResponse.data;
     } catch (error) {
         console.log(error);
         if (statusUpdateCallback) {
@@ -429,7 +431,7 @@ export async function dispatchWorkflowViaIssue(organizationName, workflowDispatc
     }
 
     // Extract archive contents with JSZip
-    const secureZip = await JSZip.loadAsync(resultArtifactResponse.data);
+    const secureZip = await JSZip.loadAsync(resultArtifactResponseData);
     
     if (!Object.hasOwn(secureZip.files, 'aes-key.enc')) {
         if (statusUpdateCallback) {
