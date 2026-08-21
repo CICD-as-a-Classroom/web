@@ -19,7 +19,7 @@ htmlPlugins = [
   })
 ];
 
-non_index_pages = ['finalize-auth', 'finalize-auth-device-flow'];
+non_index_pages = ['finalize-auth'];
 non_index_pages.forEach((page) => {
   entries[page] = [
     baseCSS,

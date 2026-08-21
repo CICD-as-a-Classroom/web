@@ -53,7 +53,6 @@ jobs:
           echo "workflowDispatchAppId: '${WORKFLOW_DISPATCH_APP_ID}'" >> src/config/conf.yaml
           echo "workflowDispatchAppInstallationId: ${WORKFLOW_DISPATCH_APP_INSTALLATION_ID}" >> src/config/conf.yaml
           echo "classroomRSAPublicKey: '${CLASSROOM_RSA_PUBLIC_KEY}'" >> src/config/conf.yaml
-          echo "publicPath: '${PUBLIC_PATH}'" >> src/config/conf.yaml
           echo "$WORKFLOW_DISPATCH_APP_PRIVATE_KEY" > private-key-pkcs1.pem
 
           # Convert private key from PKCS1 to PKCS8
