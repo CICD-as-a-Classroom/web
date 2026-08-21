@@ -190,6 +190,7 @@ async function refreshAuthTokens(organizationName, workflowDispatchAppInstallati
     };
 }
 
+/*
 async function authenticate() {
     const redirectingContentContainer = document.getElementById('redirecting-content-container');
     const loadingContentContainer = document.getElementById('loading-content-container');
@@ -219,6 +220,25 @@ async function authenticate() {
     util.setCookie('stateBase64url', stateBase64url, '/', 3600);
     
     window.location.replace(`https://github.com/login/oauth/authorize?client_id=${authClientId}&state=${stateBase64url}&code_challenge=${pkceCodeChallenge}&code_challenge_method=S256`)
+}
+*/
+
+async function authenticate() {
+    const redirectingContentContainer = document.getElementById('redirecting-content-container');
+    const loadingContentContainer = document.getElementById('loading-content-container');
+    const refreshAuthTokensContentContainer = document.getElementById('refresh-auth-tokens-content-container');
+    redirectingContentContainer.style.display = 'block';
+    loadingContentContainer.style.display = 'none';
+    refreshAuthTokensContentContainer.style.display = 'none';
+
+    const state = {
+        originatingUrl: window.location.href
+    };
+    const stateBase64url =
+        new TextEncoder().encode(JSON.stringify(state))
+        .toBase64({ alphabet: 'base64url', omitPadding: true });
+    
+    window.location.replace(`${siteConfig.publicPath}/finalize-auth-device-flow/?state=${stateBase64url}`)
 }
 
 async function acceptAssignment(organizationName, workflowDispatchAppInstallation, accessToken, refreshToken, assignmentName, assignmentAcceptKey) {
